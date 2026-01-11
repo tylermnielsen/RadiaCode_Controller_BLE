@@ -1,7 +1,5 @@
 #include <Arduino.h>
-
-#include <BTstackLib.h>
-#include <SPI.h>
+#include <RadiaCodeBLELib.h>
 
 /**
  * 1. Install the appropriate callbacks using the BluetoothHIDMaster::onXXX
@@ -18,37 +16,19 @@
 int counter = 0;
 BD_ADDR device = BD_ADDR("52:43:06:60:17:dd");
 
-void advertisementCallback(BLEAdvertisement *bleAd);
+void advertisementCallback(BLEAdvertisement* bleAd);
 
 void setup() {
-  while (!Serial)
-    ;
+  while (!Serial);
 
   Serial.begin(115200);
 
   Serial.println("Starting Bluetooth HID Master");
 
-  BTstack.setBLEAdvertisementCallback(advertisementCallback);
-  BTstack.setup();
-  BTstack.bleStartScanning();
+  RadiaCodeBLEController::_only_named_devices = true;
+  RadiaCodeBLEController::deviceScanUtility();
 
   Serial.println("Setup Done.");
 }
 
-void loop() {
-  BTstack.loop(); 
-}
-
-void advertisementCallback(BLEAdvertisement *bleAd) {
-  if (!(bleAd->isIBeacon())) {
-    // Serial.print("Device discovered: ");
-    // Serial.println(bleAd->getBdAddr()->getAddressString());
-
-    if (memcmp(bleAd->getBdAddr()->getAddress(), device.getAddress(),
-               sizeof(device)) == 0) {
-      counter++;
-      Serial.printf("Found device %s, has been found %d times.\n",
-                    device.getAddressString(), counter);
-    }
-  }
-}
+void loop() { BTstack.loop(); }
