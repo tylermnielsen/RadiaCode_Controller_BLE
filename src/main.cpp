@@ -13,8 +13,8 @@
  *
  */
 
-int counter = 0;
-BD_ADDR device = BD_ADDR("52:43:06:60:17:dd");
+String target_mac = "52:43:06:60:17:dd";
+RadiaCodeBLEController rc(target_mac);
 
 void advertisementCallback(BLEAdvertisement* bleAd);
 
@@ -25,10 +25,9 @@ void setup() {
 
   Serial.println("Starting Bluetooth HID Master");
 
-  RadiaCodeBLEController::_only_named_devices = true;
-  RadiaCodeBLEController::deviceScanUtility();
+  rc.begin();
 
   Serial.println("Setup Done.");
 }
 
-void loop() { BTstack.loop(); }
+void loop() { rc.loop(); }

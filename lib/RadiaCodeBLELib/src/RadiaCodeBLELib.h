@@ -5,16 +5,19 @@
 #include <BTstackLib.h>
 #include <stdint.h>
 
+#include "BLEDriver.h"
+
 class RadiaCodeBLEController {
  private:
   String target_mac;
-  BD_ADDR device;
 
   // scanning utility
   static void advertisementCallback(BLEAdvertisement* bleAd);
 
  public:
   RadiaCodeBLEController(String target_mac);
+  void begin();
+  void loop();
 
   // scanning utility
   static bool _only_named_devices;

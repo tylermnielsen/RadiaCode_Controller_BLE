@@ -14,8 +14,22 @@ bool RadiaCodeBLEController::_only_named_devices = true;
  */
 RadiaCodeBLEController::RadiaCodeBLEController(String target_mac) {
   this->target_mac = target_mac;
-  this->device = BD_ADDR(target_mac.c_str());
 }
+
+/**
+ * @brief Initialize the RadiaCode BLE Connection
+ *
+ */
+void RadiaCodeBLEController::begin() {
+  BTstack.setup();
+  BLEDriver::instance().init(target_mac);
+}
+
+/**
+ * @brief Main loop for controller operation
+ *
+ */
+void RadiaCodeBLEController::loop() { BTstack.loop(); }
 
 /**
  * @brief Device Scan Utility - scans for any BLE devices and prints their mac
