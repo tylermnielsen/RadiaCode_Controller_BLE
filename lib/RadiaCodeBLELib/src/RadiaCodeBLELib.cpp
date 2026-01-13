@@ -1,5 +1,7 @@
 #include "RadiaCodeBLELib.h"
 
+#include <btstack.h>
+
 /**
  * @brief Setting for device scanner to only print devices that provide a name
  * in their advertisement
@@ -20,16 +22,13 @@ RadiaCodeBLEController::RadiaCodeBLEController(String target_mac) {
  * @brief Initialize the RadiaCode BLE Connection
  *
  */
-void RadiaCodeBLEController::begin() {
-  BTstack.setup();
-  BLEDriver::instance().init(target_mac);
-}
+void RadiaCodeBLEController::begin() { BLEDriver::instance().init(target_mac); }
 
 /**
  * @brief Main loop for controller operation
  *
  */
-void RadiaCodeBLEController::loop() { BTstack.loop(); }
+void RadiaCodeBLEController::loop() {}
 
 /**
  * @brief Device Scan Utility - scans for any BLE devices and prints their mac

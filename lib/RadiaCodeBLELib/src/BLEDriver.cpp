@@ -20,6 +20,7 @@ void BLEDriver::init(String mac) {
 
   // set up for connection sequence
   this->_flag = false;
+  __lockBluetooth();
   BTstack.setBLEDeviceConnectedCallback(
       [](BLEStatus status, BLEDevice* device) {
         BLEDriver::instance().deviceConnectedCallback(status, device);
@@ -41,10 +42,12 @@ void BLEDriver::init(String mac) {
         BLEDriver::instance().characteristicNotificationCallback(
             device, value_handle, value, length);
       });
+  BTstack.setup();
 
   // connect to device
   BTstack.bleConnect(BD_ADDR_TYPE::PUBLIC_ADDRESS, this->device.getAddress(),
                      RADIACODE_CONNECT_TIMEOUT_MS);
+  __unlockBluetooth();
 
   // busy wait for connection
   unsigned long start = millis();
@@ -53,7 +56,8 @@ void BLEDriver::init(String mac) {
       DEBUG("Connection timed out on stage: " + String(this->_stage));
       return;
     }
-    BTstack.loop();
+    // BTstack.loop();
+    delay(100);
   }
 
   DEBUG("Device connection set up.\n");
@@ -68,7 +72,12 @@ void BLEDriver::deviceConnectedCallback(BLEStatus status, BLEDevice* device) {
 
     // now find services
     this->_stage = 1;
-    BTstack.discoverGATTServices(device);
+
+    // __lockBluetooth();
+    // if (BTstack.discoverGATTServices(device) != ERROR_CODE_SUCCESS)
+    //   DEBUG("Error starting service discovery.");
+    // __unlockBluetooth();
+    device->discoverGATTServices();
   } else {
     DEBUG("Device connection failed.");
   }
@@ -102,8 +111,24 @@ void BLEDriver::serviceDiscoveredCallback(BLEStatus status, BLEDevice* device,
       return;
     }
 
-    BTstack.discoverCharacteristicsForService(&this->_device,
-                                              &this->_service_handle);
+    // device->discoverCharacteristicsForService(&this->_service_handle);
+
+    gatt_client_service_t hci_service = *(this->_service_handle.getService());
+    hci_service.start_group_handle = 1;
+    hci_service.end_group_handle = 0xFFFF;
+
+    BLEService service_override(hci_service);
+
+    DEBUG(service_override.getService()->start_group_handle);
+    DEBUG(service_override.getService()->end_group_handle);
+
+    __lockBluetooth();
+    if (BTstack.discoverCharacteristicsForService(
+            &this->_device, &service_override) != ERROR_CODE_SUCCESS) {
+      DEBUG("Error starting characteristic discovery.");
+    }
+    __unlockBluetooth();
+
   } else {
     DEBUG("Service discovery failed.");
   }
@@ -111,11 +136,13 @@ void BLEDriver::serviceDiscoveredCallback(BLEStatus status, BLEDevice* device,
 
 void BLEDriver::characteristicDiscoveredCallback(
     BLEStatus status, BLEDevice* device, BLECharacteristic* characteristic) {
-  Serial.printf("char callback: status=%d device=%p handle=%u\n", status,
-                (void*)device, device ? device->getHandle() : 0);
-
   if (status == BLE_STATUS_OK) {
-    DEBUG("Characteristic discovered successfully.");
+    // DEBUG("Characteristic discovered successfully.");
+
+    Serial.print("Characteristic Discovered: ");
+    Serial.print(characteristic->getUUID()->getUuidString());
+    Serial.print(", handle 0x");
+    Serial.println(characteristic->getCharacteristic()->value_handle, HEX);
 
     // check if characteristic matches write fd UUID
     if (characteristic->matches(&_write_fd_UUID)) {
@@ -125,13 +152,16 @@ void BLEDriver::characteristicDiscoveredCallback(
     }
 
     // check if characteristic matches notify fd UUID
-    if (characteristic->matches(&_notify_fd_UUID)) {
+    else if (characteristic->matches(&_notify_fd_UUID)) {
       DEBUG("Notify FD characteristic found.");
       this->_notify_fd_handle = *characteristic;
       this->_stage++;
 
       // subscribe for notifications
       this->_flag = true;  // signal that connection sequence is done
+    } else {
+      DEBUG("Discovered characteristic does not match target UUID (" +
+            String(characteristic->getUUID()->getUuid128String()) + ").");
     }
   } else if (status == BLE_STATUS_DONE) {
     DEBUG("Characteristic discovery done.");
@@ -141,7 +171,14 @@ void BLEDriver::characteristicDiscoveredCallback(
       return;
     }
 
-    BTstack.subscribeForNotifications(device, characteristic);
+    // __lockBluetooth();
+    // if (BTstack.subscribeForNotifications(device, &this->_notify_fd_handle)
+    // !=
+    //     ERROR_CODE_SUCCESS) {
+    //   DEBUG("Error subscribing for notifications.");
+    // }
+    // __unlockBluetooth();
+    device->subscribeForNotifications(&this->_notify_fd_handle);
 
   } else {
     DEBUG("Characteristic discovery failed - " + String(status));
