@@ -105,6 +105,8 @@ static int service_index = 0;
 
 static btstack_packet_callback_registration_t hci_event_callback_registration;
 
+static volatile bool subscribed = false; 
+
 /* @section GATT client setup
  *
  * @text In the setup phase, a GATT client must register the HCI and GATT client
@@ -264,6 +266,7 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel,
       Serial.printf("\nGATT browser - DISCONNECTED\n");
       break;
     default:
+      Serial.printf("Unkown hci event %d\n", event); 
       break;
   }
 }
@@ -297,6 +300,7 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel,
       dump_service(&service);
       services[service_count++] = service;
       break;
+
     case GATT_EVENT_CHARACTERISTIC_QUERY_RESULT:
       gatt_event_characteristic_query_result_get_characteristic(
           packet, &characteristic);
@@ -312,11 +316,17 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel,
             &notification_listener, handle_gatt_client_event, connection_handle,
             &radiacode_notify_char);
 
-        gatt_client_write_client_characteristic_configuration(
-            handle_gatt_client_event, connection_handle, &radiacode_notify_char,
-            GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION);
+        // gatt_client_write_client_characteristic_configuration(
+        //     handle_gatt_client_event, connection_handle, &radiacode_notify_char,
+        //     GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION);
+        gatt_client_write_value_of_characteristic(handle_gatt_client_event, 
+                                                  connection_handle, 
+                                                  radiacode_notify_char.value_handle + 1, 
+                                                  2, 
+                                                  (uint8_t*)"\x01\x00");
 
         dump_characteristic(&characteristic);
+        subscribed = true; 
       } else if (strcmp(uuid128_to_str(characteristic.uuid128),
                         RADIACODE_WRITE_FD_UUID) == 0) {
         Serial.printf("Found RadiaCode Write Characteristic!\n");
@@ -368,7 +378,10 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel,
       }
       break;
 
+
+
     default:
+      Serial.printf("Unknown case %u\n", hci_event_packet_get_type(packet));
       break;
   }
 }
@@ -396,6 +409,13 @@ int btstack_main(int argc, const char* argv[]) {
 void setup() {
   Serial.begin(115200);
   btstack_main(0, NULL);
+
+  while(subscribed == false){
+    sleep_ms(100); 
+  }
+
+  // self.execute(COMMAND.SET_EXCHANGE, b'\x01\xff\x12\xff')
+  
 }
 
 void loop() {}
