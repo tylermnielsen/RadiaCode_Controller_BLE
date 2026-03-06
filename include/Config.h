@@ -112,3 +112,20 @@ enum VSFR {
     SYS_MCU_TEMP = 0xFFFF000D,
     SYS_FW_VER_BT = 0xFFFF010
 };
+
+enum VS {
+  CONFIGURATION = 2,
+  FW_DESCRIPTOR = 3,
+  SERIAL_NUMBER = 8,
+  // UNKNOWN_13 = 0xd,
+  TEXT_MESSAGE = 0xF,
+  MEM_SNAPSHOT = 0xE0,
+  // UNKNOWN_240 = 0xf0,
+  DATA_BUF = 0x100,
+  SFR_FILE = 0x101,
+  SPECTRUM = 0x200,
+  ENERGY_CALIB = 0x202,
+  SPEC_ACCUM = 0x205,
+  SPEC_DIFF = 0x206,  // TODO: what's that? Can be decoded by spectrum decoder
+  SPEC_RESET = 0x207  // TODO: looks like spectrum, but our spectrum decoder fails with `vlen == 7 unsupported`
+};
