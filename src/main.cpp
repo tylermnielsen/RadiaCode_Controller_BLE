@@ -38,21 +38,23 @@ BLEUUID rc_notify_uuid(RADIACODE_NOTIFY_FD_UUID);
 BLERemoteCharacteristic* rc_write_char; 
 BLERemoteCharacteristic*rc_notify_char; 
 
-// globally defined vectors with preallocation to avoid heap reallocation, should be 
-// large enough for their use case
-
+// globally defined vectors with preallocation to avoid heap reallocation, will have 
+// reserved capacity large enough for their use case
 static std::vector<uint8_t> _resp_buffer; 
 static std::vector<uint8_t> _response; 
-// static std::vector<int> spectrum; 
+static std::vector<uint8_t> res_ret; 
+static std::vector<int> spectrum; 
 
 static void reserve_buffers(){
   // max seen size = 20 
   _resp_buffer.reserve(20 * 2);
   // max seen size = 890
   _response.reserve(890 * 2);
+  // max seen size = 890
+  res_ret.reserve(890 * 2);
   // max seen size = 1024
   // this is for spectrums which should always be 1024
-  // spectrum.reserve(1024 + 200); 
+  spectrum.reserve(1024 + 200); 
 }
 
 static size_t _resp_size = 0; 
@@ -75,7 +77,9 @@ void notify(BLERemoteCharacteristic * c, const uint8_t * data, uint32_t len){
     memcpy(&size_buf, data, sizeof(int));
     _resp_size = 4 + size_buf;
     // read in the rest of the bytes as data
-    _resp_buffer = std::vector<uint8_t>(data+4, data+len);
+    // _resp_buffer = std::vector<uint8_t>(data+4, data+len);
+    _resp_buffer.clear();
+    _resp_buffer.insert(_resp_buffer.end(), data+4, data+len); 
   } else {
     // read in the bytes as data
     _resp_buffer.insert(_resp_buffer.end(), data, data+len);
@@ -95,7 +99,7 @@ void notify(BLERemoteCharacteristic * c, const uint8_t * data, uint32_t len){
   }
 }
 
-std::vector<uint8_t> ble_execute(uint8_t* data, size_t len) {
+std::vector<uint8_t>* ble_execute(uint8_t* data, size_t len) {
   for(int i = 0; i < len; i += 18){
     // write write_fd
     if(i * 18 + 18 < len){
@@ -109,14 +113,17 @@ std::vector<uint8_t> ble_execute(uint8_t* data, size_t len) {
   while (_response.empty()) {
     if(millis() - start_time > 5000){
       Serial.println("timeout"); 
-      return _response;  
+      return &_response;  
     }
   }
 
-  std::vector<uint8_t> res(_response);
+  // std::vector<uint8_t> res(_response);
+  res_ret.clear(); // reuse res_ret
+  res_ret.insert(res_ret.end(), _response.begin(), _response.end());
+
   _response.clear(); 
 
-  return res; 
+  return &res_ret; 
 }
 
 struct __attribute__((packed)) BLERequestHeader {
@@ -127,7 +134,7 @@ struct __attribute__((packed)) BLERequestHeader {
 };
 
 static uint16_t seq = 0; 
-std::vector<uint8_t> execute(uint16_t req_type, uint8_t* args, size_t len){
+std::vector<uint8_t>* execute(uint16_t req_type, uint8_t* args, size_t len){
   // Serial.println("execute"); 
   uint8_t req_seq_no = 0x80 + seq; 
   seq = (seq + 1) % 32; 
@@ -146,21 +153,21 @@ std::vector<uint8_t> execute(uint16_t req_type, uint8_t* args, size_t len){
   }
 
   // Serial.println("Sending buffer:"); 
-  for(auto c : buffer){
-    Serial.printf("%02x ", c);
-  }
-  Serial.println(); 
+  // for(auto c : buffer){
+  //   Serial.printf("%02x ", c);
+  // }
+  // Serial.println(); 
 
-  std::vector<uint8_t> response = ble_execute(buffer, len+sizeof(BLERequestHeader)); 
+  std::vector<uint8_t>* response = ble_execute(buffer, len+sizeof(BLERequestHeader)); 
 
   // check header 
-  if(memcmp(response.data(), &(header.req_type), 4) != 0){
+  if(memcmp(response->data(), &(header.req_type), 4) != 0){
     Serial.println("Response header does not match request header!"); 
-    return std::vector<uint8_t>(); 
+    return nullptr; 
   }
 
   // remove compared header fields  
-  response.erase(response.begin(), response.begin() + 4);
+  response->erase(response->begin(), response->begin() + 4);
 
   return response; 
 }
@@ -171,9 +178,9 @@ void write_request(int command_id, uint8_t* data, size_t len){
   memcpy(buf, &command_id, sizeof(int)); 
   memcpy(buf+sizeof(int), data, len); 
 
-  std::vector<uint8_t> r = execute(Command::WR_VIRT_SFR, buf, (4 + len));
+  std::vector<uint8_t>* r = execute(Command::WR_VIRT_SFR, buf, (4 + len));
 
-  if(r.empty()){
+  if(r->empty()){
     Serial.println("No r, likely timeout"); 
     return; 
   }
@@ -181,43 +188,43 @@ void write_request(int command_id, uint8_t* data, size_t len){
   // read last 4 bytes into retcode 
   // match BytesBuffer behavior 
   uint32_t retcode = 0; 
-  memcpy(&retcode, r.data() + r.size()-4, sizeof(uint32_t));
+  memcpy(&retcode, r->data() + r->size()-4, sizeof(uint32_t));
 
   if(retcode != 1){
     Serial.printf("Bad retcode %u\n", retcode);
   }
 }
 
-std::vector<uint8_t> read_request(uint32_t command_id){
+std::vector<uint8_t>* read_request(uint32_t command_id){
   // Serial.println("read_request");
-  std::vector<uint8_t> r = execute(Command::RD_VIRT_STRING, (uint8_t*)&command_id, sizeof(int));
+  std::vector<uint8_t>* r = execute(Command::RD_VIRT_STRING, (uint8_t*)&command_id, sizeof(int));
 
   uint32_t retcode, flen; 
-  memcpy(&retcode, r.data(), sizeof(int)); 
-  memcpy(&flen, r.data() + sizeof(int), sizeof(int));
-  r.erase(r.begin(), r.begin() + 8); // remove retcode and flen from buffer
+  memcpy(&retcode, r->data(), sizeof(int)); 
+  memcpy(&flen, r->data() + sizeof(int), sizeof(int));
+  r->erase(r->begin(), r->begin() + 8); // remove retcode and flen from buffer
 
   if(retcode != 1){
     Serial.printf("Bad retcode %u\n", retcode);
     Serial.printf("flen: %u\n", flen);
-    for(int i = 0; i < r.size(); i++){
-      Serial.printf("%02x ", r.at(i));
+    for(int i = 0; i < r->size(); i++){
+      Serial.printf("%02x ", r->at(i));
     }
-    return std::vector<uint8_t>(); 
+    return nullptr; 
   }
 
   // hack?
-  if(r.size() == flen + 1 && r.at(r.size()-1) == 0x00){
-    r.pop_back(); 
+  if(r->size() == flen + 1 && r->at(r->size()-1) == 0x00){
+    r->pop_back(); 
   }
   // end
 
-  if(r.size() != flen) Serial.printf("Mismatch between buffer (%d) and header (%d)\n", r.size(), flen); 
+  if(r->size() != flen) Serial.printf("Mismatch between buffer (%d) and header (%d)\n", r->size(), flen); 
 
   return r; 
 }
 
-String decode_cp1251(std::vector<uint8_t> data){
+String decode_cp1251(const std::vector<uint8_t>& data){
   String res; 
 
   for(uint8_t c : data){
@@ -233,20 +240,20 @@ String decode_cp1251(std::vector<uint8_t> data){
   return res; 
 }
 
-uint8_t decode_spectrum(std::vector<uint8_t> data, std::vector<int>& ret, float& a0, float& a1, float& a2, uint32_t& ts){
+uint8_t decode_spectrum(std::vector<uint8_t>* data, std::vector<int>& ret, float& a0, float& a1, float& a2, uint32_t& ts){
   // iterator
-  uint8_t* place = data.data();
+  uint8_t* place = (uint8_t*) (data->data());
   
   // read first bytes 
-  memcpy(&ts, data.data() + 0, sizeof(uint32_t));
-  memcpy(&a0, data.data() + 4, sizeof(float));
-  memcpy(&a1, data.data() + 8, sizeof(float));
-  memcpy(&a2, data.data() + 12, sizeof(float));
+  memcpy(&ts, data->data() + 0, sizeof(uint32_t));
+  memcpy(&a0, data->data() + 4, sizeof(float));
+  memcpy(&a1, data->data() + 8, sizeof(float));
+  memcpy(&a2, data->data() + 12, sizeof(float));
   place = place + 16;
 
   int last = 0; 
   int v = 0; 
-  while(place < data.data() + data.size()){
+  while(place < data->data() + data->size()){
     uint16_t u16; 
     memcpy(&u16, place, sizeof(uint16_t)); 
     place += sizeof(uint16_t); 
@@ -381,31 +388,16 @@ void setup() {
   // std::vector<uint8_t> r = read_request(VS::CONFIGURATION); 
   // Serial.println(decode_cp1251(r)); 
 
-  // get spectrum 
-  std::vector<uint8_t> r = read_request(VS::SPECTRUM);
-
-  float a0, a1, a2;
-  uint32_t ts; 
-  std::vector<int> spectrum; 
-  decode_spectrum(r, spectrum, a0, a1, a2, ts);
-  Serial.printf("a0: %f, a1: %f, a2: %f, ts: %u\n", a0, a1, a2, ts);
-  Serial.printf("len: %d ", spectrum.size());
-  Serial.println("Spectrum:");
-  for(int v : spectrum){
-    Serial.printf("%d, ", v);
-  }
-  Serial.println(); 
-  
   Serial.println("Setup Done.");
 }
 
 void loop() {
 // get spectrum 
-  std::vector<uint8_t> r = read_request(VS::SPECTRUM);
+  std::vector<uint8_t>* r = read_request(VS::SPECTRUM);
 
   float a0, a1, a2;
   uint32_t ts; 
-  std::vector<int> spectrum; 
+  spectrum.clear(); 
   decode_spectrum(r, spectrum, a0, a1, a2, ts);
   Serial.printf("a0: %f, a1: %f, a2: %f, ts: %u\n", a0, a1, a2, ts);
   Serial.printf("len: %d ", spectrum.size());
