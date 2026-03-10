@@ -7,6 +7,8 @@
 #include "Config.h"
 #include <string> 
 
+#include "BytesBuffer.h"
+
 /**
  * 1. Install the appropriate callbacks using the BluetoothHIDMaster::onXXX
  * methods
