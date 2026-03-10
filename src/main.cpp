@@ -42,12 +42,14 @@ BLERemoteCharacteristic*rc_notify_char;
 // reserved capacity large enough for their use case
 static std::vector<uint8_t> _resp_buffer; 
 static std::vector<uint8_t> _response; 
+static mutex_t _response_mutex; 
 static std::vector<uint8_t> res_ret; 
 static std::vector<int> spectrum; 
 
 static void reserve_buffers(){
-  // max seen size = 20 
-  _resp_buffer.reserve(20 * 2);
+  mutex_init(&_response_mutex); 
+  // accumulator for _response - max seen = 890 - per transfer max seen size = 20 
+  _resp_buffer.reserve(890 * 2);
   // max seen size = 890
   _response.reserve(890 * 2);
   // max seen size = 890
@@ -93,7 +95,10 @@ void notify(BLERemoteCharacteristic * c, const uint8_t * data, uint32_t len){
     // copied entire message
     // Serial.println("message ended"); 
     // send to _response
+    mutex_enter_blocking(&_response_mutex); 
     _response.insert(_response.end(), _resp_buffer.begin(), _resp_buffer.end());
+    mutex_exit(&_response_mutex); 
+
     // wipe _resp_buffer
     _resp_buffer.clear();
   }
@@ -113,15 +118,17 @@ std::vector<uint8_t>* ble_execute(uint8_t* data, size_t len) {
   while (_response.empty()) {
     if(millis() - start_time > 5000){
       Serial.println("timeout"); 
-      return &_response;  
+      return nullptr;  
     }
   }
 
   // std::vector<uint8_t> res(_response);
   res_ret.clear(); // reuse res_ret
-  res_ret.insert(res_ret.end(), _response.begin(), _response.end());
 
+  mutex_enter_blocking(&_response_mutex); 
+  res_ret.insert(res_ret.end(), _response.begin(), _response.end());
   _response.clear(); 
+  mutex_exit(&_response_mutex); 
 
   return &res_ret; 
 }
@@ -319,7 +326,40 @@ uint8_t decode_spectrum(std::vector<uint8_t>* data, std::vector<int>& ret, float
     }
   }
 
-  Serial.printf("Spectrum buf size: %d\n", ret.size()); 
+  return 0; 
+}
+
+void printSpectrum(){
+  std::vector<uint8_t>* r = read_request(VS::SPECTRUM);
+
+  float a0, a1, a2;
+  uint32_t ts; 
+  spectrum.clear(); 
+  decode_spectrum(r, spectrum, a0, a1, a2, ts);
+  Serial.printf("a0: %f, a1: %f, a2: %f, ts: %u\n", a0, a1, a2, ts);
+  Serial.printf("len: %d ", spectrum.size());
+  Serial.println("Spectrum:");
+  for(int v : spectrum){
+    Serial.printf("%d, ", v);
+  }
+  Serial.println(); 
+}
+
+uint8_t consume_data_buf(std::vector<uint8_t>* r){
+  uint8_t* place = r->data(); 
+
+  if(r->size() < 7) return -1; // too short? 
+
+  uint8_t seq, eid, gid; 
+  int32_t ts_offset; 
+
+  memcpy(&seq, place++, sizeof(uint8_t)); 
+  memcpy(&eid, place++, sizeof(uint8_t)); 
+  memcpy(&gid, place++, sizeof(uint8_t)); 
+  memcpy(&ts_offset, place, sizeof(int32_t)); 
+  place += sizeof(int32_t); 
+
+
 
   return 0; 
 }
@@ -392,20 +432,15 @@ void setup() {
 }
 
 void loop() {
-// get spectrum 
-  std::vector<uint8_t>* r = read_request(VS::SPECTRUM);
 
-  float a0, a1, a2;
-  uint32_t ts; 
-  spectrum.clear(); 
-  decode_spectrum(r, spectrum, a0, a1, a2, ts);
-  Serial.printf("a0: %f, a1: %f, a2: %f, ts: %u\n", a0, a1, a2, ts);
-  Serial.printf("len: %d ", spectrum.size());
-  Serial.println("Spectrum:");
-  for(int v : spectrum){
-    Serial.printf("%d, ", v);
-  }
-  Serial.println(); 
+  printSpectrum(); 
+
+  // get event data 
+  // std::vector<uint8_t>* r = read_request(VS::DATA_BUF); 
+
+  // while(r->size() > 0){
+  //   consume_data_buf(r); 
+  // }
   
   delay(5000); 
 }
