@@ -33,7 +33,6 @@ String target_mac = "52:43:06:60:17:DD";
 // RadiaCodeBLEController rc(target_mac);
 // BLEAddress rc_addr(target_mac); 
 
-
 BLEUUID rc_service_uuid(RADIACODE_SERVICE_UUID);
 BLEUUID rc_write_uuid(RADIACODE_WRITE_FD_UUID);
 BLEUUID rc_notify_uuid(RADIACODE_NOTIFY_FD_UUID);
@@ -53,19 +52,6 @@ volatile bool _response_ready = false;
 // static std::vector<uint8_t> res_ret; // main safe 
 static BytesBuffer res_ret(4000); 
 // static std::vector<int> spectrum; 
-
-static void reserve_buffers(){
-  mutex_init(&_response_mutex); 
-  // accumulator for _response - max seen = 890 - per transfer max seen size = 20 
-  // _resp_buffer.reserve(890 * 2);
-  // max seen size = 890
-  // _response.reserve(890 * 2);
-  // max seen size = 890
-  // res_ret.reserve(890 * 2);
-  // max seen size = 1024
-  // this is for spectrums which should always be 1024
-  // spectrum.reserve(1024 + 200); 
-}
 
 static size_t _resp_size = 0; 
 void notify(BLERemoteCharacteristic * c, const uint8_t * data, uint32_t len){
@@ -87,13 +73,10 @@ void notify(BLERemoteCharacteristic * c, const uint8_t * data, uint32_t len){
     memcpy(&size_buf, data, sizeof(int));
     _resp_size = 4 + size_buf;
     // read in the rest of the bytes as data
-    // _resp_buffer = std::vector<uint8_t>(data+4, data+len);
     _resp_buffer.clear();
-    // _resp_buffer.insert(_resp_buffer.end(), data+4, data+len); 
     _resp_buffer.fill(data+4, len-4); 
   } else {
     // read in the bytes as data
-    // _resp_buffer.insert(_resp_buffer.end(), data, data+len);
     _resp_buffer.fill(data, len);
   }
 
@@ -106,7 +89,6 @@ void notify(BLERemoteCharacteristic * c, const uint8_t * data, uint32_t len){
     // Serial.println("message ended"); 
     // send to _response
     mutex_enter_blocking(&_response_mutex); 
-    // _response.insert(_response.end(), _resp_buffer.begin(), _resp_buffer.end());
     _response.copy(_resp_buffer); 
     mutex_exit(&_response_mutex); 
     _response_ready = true; 
@@ -134,11 +116,9 @@ BytesBuffer* ble_execute(uint8_t* data, size_t len) {
     }
   }
 
-  // std::vector<uint8_t> res(_response);
   res_ret.clear(); // reuse res_ret
 
   mutex_enter_blocking(&_response_mutex); 
-  // res_ret.insert(res_ret.end(), _response.begin(), _response.end());
   res_ret.copy(_response); 
   _response.clear(); 
   mutex_exit(&_response_mutex); 
@@ -154,8 +134,8 @@ struct __attribute__((packed)) BLERequestHeader {
   uint8_t req_seq_no; 
 };
 
-static uint16_t seq = 0; 
 BytesBuffer* execute(uint16_t req_type, uint8_t* args, size_t len){
+  static uint16_t seq = 0; 
   // Serial.println("execute"); 
   uint8_t req_seq_no = 0x80 + seq; 
   seq = (seq + 1) % 32; 
@@ -186,7 +166,7 @@ BytesBuffer* execute(uint16_t req_type, uint8_t* args, size_t len){
   uint16_t received_req_type = response->consume<uint16_t>(); 
   uint8_t received_zero = response->consume<uint8_t>(); 
   uint8_t received_req_seq_no = response->consume<uint8_t>(); 
-  if(received_req_type != header.req_type || received_zero != header.zero || received_req_seq_no != header.req_seq_no){ //memcmp(response->data(), &(header.req_type), 4) != 0){
+  if(received_req_type != header.req_type || received_zero != header.zero || received_req_seq_no != header.req_seq_no){
     Serial.println("Response header does not match request header!"); 
     Serial.printf("(expected|received) req_type: %u|%u zero: %u|%u req_seq_no: %u|%u\n", header.req_type, received_req_type, header.zero, received_zero, header.req_seq_no, received_req_seq_no);
 
@@ -194,7 +174,6 @@ BytesBuffer* execute(uint16_t req_type, uint8_t* args, size_t len){
   }
 
   // remove compared header fields  
-  // response->erase(response->begin(), response->begin() + 4);
 
   return response; 
 }
@@ -212,10 +191,8 @@ void write_request(int command_id, uint8_t* data, size_t len){
     return; 
   }
 
-  // idk about this --> read last 4 bytes into retcode 
   // match BytesBuffer behavior 
-  uint32_t retcode = r->consume<uint32_t>(); //0; 
-  // memcpy(&retcode, r->data() + r->size()-4, sizeof(uint32_t));
+  uint32_t retcode = r->consume<uint32_t>(); 
 
   if(retcode != 1){
     Serial.printf("Bad retcode %u\n", retcode);
@@ -230,9 +207,6 @@ BytesBuffer* read_request(uint32_t command_id){
 
   uint32_t retcode = r->consume<uint32_t>(); 
   uint32_t flen = r->consume<uint32_t>(); 
-  // memcpy(&retcode, r->data(), sizeof(int)); 
-  // memcpy(&flen, r->data() + sizeof(int), sizeof(int));
-  // r->erase(r->begin(), r->begin() + 8); // remove retcode and flen from buffer
 
   if(retcode != 1){
     Serial.printf("Bad retcode %x\n", retcode);
@@ -286,35 +260,25 @@ uint8_t decode_spectrum(BytesBuffer* data, int* ret, float& a0, float& a1, float
   int v = 0; 
   while(data->empty() == false){  //place < data->data() + data->size()){
     uint16_t u16 = data->consume<uint16_t>(); 
-    // memcpy(&u16, place, sizeof(uint16_t)); 
-    // place += sizeof(uint16_t); 
     uint16_t cnt = (u16 >> 4) & 0x0FFF; 
     uint16_t vlen = u16 & 0x0F; 
-    // Serial.printf("\nu16: %u vlen: %u cnt: %u \n", u16, vlen, cnt); 
-    // if(cnt > 0) Serial.print("\t"); 
     
     for(int i = 0; i < cnt; i++){
       if(vlen == 0){
         v = 0; 
       } else if(vlen == 1){
         // unpack('<B')
-        uint8_t b = data->consume<uint8_t>(); 
-        // memcpy(&b, place, sizeof(uint8_t)); 
-        // place += sizeof(uint8_t); 
+        uint8_t b = data->consume<uint8_t>();  
 
         v = b;  
       } else if(vlen == 2){
         // last + unpack('<b')
         int8_t b = data->consume<int8_t>(); 
-        // memcpy(&b, place, sizeof(int8_t)); 
-        // place += sizeof(int8_t); 
 
         v = last + b; 
       } else if(vlen == 3){
         // last + unpack('<h')
         int16_t h = data->consume<int16_t>(); 
-        // memcpy(&h, place, sizeof(int16_t)); 
-        // place += sizeof(int16_t); 
 
         v = last + h; 
       } else if(vlen == 4){
@@ -323,21 +287,10 @@ uint8_t decode_spectrum(BytesBuffer* data, int* ret, float& a0, float& a1, float
         uint8_t b = data->consume<uint8_t>(); 
         int8_t c = data->consume<int8_t>(); 
 
-        // memcpy(&a, place, sizeof(uint8_t)); 
-        // place += sizeof(uint8_t); 
-
-        // memcpy(&b, place, sizeof(uint8_t)); 
-        // place += sizeof(uint8_t); 
-
-        // memcpy(&c, place, sizeof(int8_t)); 
-        // place += sizeof(int8_t); 
-
         v = last + ((c << 16) | (b << 8) | a); 
       } else if(vlen == 5){
         // last + unpack('<i')
         int32_t i = data->consume<int32_t>();
-        // memcpy(&i, place, sizeof(int32_t));
-        // place += sizeof(int32_t);
 
         v = last + i; 
       } else {
@@ -345,7 +298,6 @@ uint8_t decode_spectrum(BytesBuffer* data, int* ret, float& a0, float& a1, float
         return 1; 
       }
 
-      // Serial.printf("v: %d, ", v);
       last = v; 
       ret[ret_it++] = v;
     }
@@ -508,59 +460,63 @@ DataPoint consume_data_buf(BytesBuffer* r){
   return Error();
 }
 
-int last_spectrum = 0; 
-void setup() {
-  // setup allocations 
-  reserve_buffers();
+void radiacode_ble_init(bool verbose){
+  mutex_init(&_response_mutex); 
 
-  Serial.begin(115200);
-
-  while (!Serial);
-
-  Serial.println("Starting BLE Client");
+  if(verbose) Serial.println("Starting BLE Client");
 
   BLE.begin(); 
 
-  Serial.println("Scanning..."); 
+  if(verbose) Serial.println("Scanning..."); 
 
   BLEScanReport* res = BLE.scan();
 
   for(BLEAdvertising item : *res){
     if(item.getAddress().toString() == target_mac){
-      Serial.println("Found device, connecting...");
+      if(verbose) Serial.println("Found device, connecting...");
       if(BLE.client()->connect(item) == false){
-        Serial.println("Connected."); 
+        if(verbose) Serial.println("Connected."); 
       } 
       break;
     }
   }
 
-  Serial.println("Done."); 
+  if(verbose) Serial.println("Done."); 
 
-  Serial.println("Exploring service..."); 
+  if(verbose) Serial.println("Exploring service..."); 
   BLERemoteService* service = BLE.client()->service(rc_service_uuid); 
 
   if(service){
 
     rc_notify_char = service->characteristic(rc_notify_uuid);
     if(rc_notify_char){
-      Serial.println("Found notify char"); 
+      if(verbose) Serial.println("Found notify char"); 
       rc_notify_char->onNotify(notify); 
       rc_notify_char->enableNotifications(); 
     }
     
     rc_write_char = service->characteristic(rc_write_uuid); 
     if(rc_write_char){
-      Serial.println("Found write char"); 
+      if(verbose) Serial.println("Found write char"); 
     }
 
   } else {
-    Serial.println("Error on service"); 
+    if(verbose) Serial.println("Error on service"); 
   }
 
   // init? 
   uint8_t data[] = {0x01, 0xff, 0x12, 0xff}; 
   execute(Command::SET_EXCHANGE, data, sizeof(data));
+
+}
+
+int last_spectrum = 0; 
+void setup() {
+  Serial.begin(115200);
+
+  while (!Serial);
+
+  radiacode_ble_init(true);
 
   // set local time 
   // Serial.println("Setting local time...");
