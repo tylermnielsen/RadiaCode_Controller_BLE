@@ -1,5 +1,5 @@
 #include "BytesBuffer.h"
-#include <Arduino.h>
+#include <Arduino.h> // for print and printAll
 
 BytesBuffer::BytesBuffer(size_t capacity) {
   this->start = 0;
@@ -71,17 +71,16 @@ void BytesBuffer::fill(const uint8_t* new_data, size_t len) {
 
 void BytesBuffer::drain(uint8_t* output, size_t len){
     if (capacity - start >= len) {
-      memcpy(output, data + start, len);
+      if(output != nullptr) memcpy(output, data + start, len);
       start += len;  
     } else {
       // if start is at the edge
       // copy the first bits
       size_t first_bits = capacity - start; 
-      memcpy(output, data + start, first_bits);
+      if(output != nullptr) memcpy(output, data + start, first_bits);
       start = 0;  // wrap around to the beginning
       // then the last bits
-      memcpy(output + first_bits, data + start,
-             len - first_bits);
+      if(output != nullptr) memcpy(output + first_bits, data + start, len - first_bits);
       start += len - first_bits;
     }
 }

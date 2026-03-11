@@ -6,6 +6,7 @@
 // #include <vector>
 #include "Config.h"
 #include <string> 
+#include "Events.h"
 
 #include "BytesBuffer.h"
 
@@ -368,19 +369,146 @@ void printSpectrum(){
   Serial.println(); 
 }
 
-uint8_t consume_data_buf(BytesBuffer* r){
-  if(r->size() < 7) return -1; // too short? 
+DataPoint consume_data_buf(BytesBuffer* r){
+  if(r->size() < 7) {
+    // too short?
+    return Error(); 
+  }
 
   uint8_t seq = r->consume<uint8_t>(); 
   uint8_t eid = r->consume<uint8_t>(); 
   uint8_t gid = r->consume<uint8_t>(); 
   int32_t ts_offset = r->consume<int32_t>(); 
 
+  dt_t dt = ts_offset * 10; 
   
+  String line = ""; 
+  if(eid == 0){
+    if(gid == 0){
+      // RealTimeData
+      return RealTimeData {
+        dt, 
+        r->consume<float>(), 
+        r->consume<float>(), 
+        r->consume<uint16_t>(),
+        r->consume<uint16_t>(), 
+        r->consume<uint16_t>(),
+        r->consume<uint8_t>()
+      };
+    }
+    else if(gid == 1){
+      // RawData
+      return RawData {
+        dt, 
+        r->consume<float>(), 
+        r->consume<float>()
+      };
+    }
+    else if(gid == 2){
+      // DoseRateDB
+      return DoseRateDB {
+        dt, 
+        r->consume<uint32_t>(), 
+        r->consume<float>(),
+        r->consume<float>(), 
+        r->consume<uint16_t>(), 
+        r->consume<uint16_t>()
+      };
+    }
+    else if(gid == 3){
+      // RareData
+      return RareData {
+        dt, 
+        r->consume<uint32_t>(),
+        r->consume<float>(), 
+        r->consume<uint16_t>(), 
+        r->consume<uint16_t>(), 
+        r->consume<uint16_t>()
+      };
+    }
+    else if(gid == 4){
+      // UserData - ?
+      r->consume<uint32_t>(); 
+      r->consume<float>(); 
+      r->consume<float>(); 
+      r->consume<uint16_t>(); 
+      r->consume<uint16_t>(); 
+      return None {eid, gid}; 
+    }
+    else if(gid == 5){
+      // ScheduleData - ?
+      r->consume<uint32_t>(); 
+      r->consume<float>(); 
+      r->consume<float>(); 
+      r->consume<uint16_t>(); 
+      r->consume<uint16_t>(); 
+      return None {eid, gid}; 
+    }
+    else if(gid == 6){
+      // AccelData - ?
+      r->consume<uint16_t>();
+      r->consume<uint16_t>();
+      r->consume<uint16_t>();
+      return None {eid, gid}; 
+    }
+    else if(gid == 7){
+      // Event 
+      return Event {
+        dt, 
+        r->consume<uint8_t>(), 
+        r->consume<uint8_t>(), 
+        r->consume<uint16_t>()
+      };
+    }
+    else if(gid == 8){
+      // RawCountRate
+      return RawCountRate {
+        dt,
+        r->consume<float>(),
+        r->consume<uint16_t>()
+      };
+    }
+    else if(gid == 9){
+      // RawDoseRate
+      return RawDoseRate {
+        dt,
+        r->consume<float>(),
+        r->consume<uint16_t>()
+      };
+    } else {
+      Serial.printf("Unknown eid: %d gid: %d\n", eid, gid); 
+    }
+  } else if(eid == 1){
+    if(gid == 1){
+      // ???
+      uint16_t samples_num = r->consume<uint16_t>(); 
+      uint32_t smpl_time_ms = r->consume<uint32_t>(); 
+      r->drain(nullptr, 8*samples_num); 
+      return None {eid, gid}; 
+    } else if(gid == 2){
+      // ???
+      uint16_t samples_num = r->consume<uint16_t>(); 
+      uint32_t smpl_time_ms = r->consume<uint32_t>(); 
+      r->drain(nullptr, 16*samples_num); 
+      return None {eid, gid}; 
+    } else if(gid == 3){
+      // ???
+      uint16_t samples_num = r->consume<uint16_t>(); 
+      uint32_t smpl_time_ms = r->consume<uint32_t>(); 
+      r->drain(nullptr, 14*samples_num); 
+      return None {eid, gid}; 
+    }
+    else {
+      Serial.printf("Unknown eid: %d gid: %d\n", eid, gid); 
+    }
+  } else {
+    Serial.printf("Unknown eid: %d gid: %d\n", eid, gid); 
+  }
 
-  return 0; 
+  return Error();
 }
 
+int last_spectrum = 0; 
 void setup() {
   // setup allocations 
   reserve_buffers();
@@ -448,6 +576,9 @@ void setup() {
   // if(r != nullptr) Serial.println(decode_cp1251(r)); 
   // else Serial.println("ERROR"); 
 
+  printSpectrum(); 
+  last_spectrum = millis(); 
+
   Serial.println("Setup Done.");
 }
 
@@ -458,9 +589,21 @@ void loop() {
   // get event data 
   BytesBuffer* r = read_request(VS::DATA_BUF); 
 
-  while(r->size() > 0){
-    consume_data_buf(r); 
+  while(r->size() >= 7){
+    DataPoint d = consume_data_buf(r); 
+
+    std::visit([](const auto& v){
+      char str[500];
+      v.to_string(str, 500); 
+      Serial.printf("%u,", millis());
+      Serial.println(str);
+    }, d);
+  }
+
+  if(millis() - last_spectrum > 5000){
+    last_spectrum = millis(); 
+    printSpectrum(); 
   }
   
-  delay(5000); 
+  delay(1000); 
 }
