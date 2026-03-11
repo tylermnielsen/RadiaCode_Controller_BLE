@@ -18,7 +18,14 @@ class BytesBuffer {
 
   void clear();
   size_t size();
-  void fill(uint8_t *new_data, size_t len);
+  bool empty(); 
+  uint8_t at(size_t place); 
+  void pop_back(); // for hacky thing 
+  void fill(const uint8_t *new_data, size_t len);
+  void copy(BytesBuffer& other); 
+  void drain(uint8_t* output, size_t len); 
+  void print(); 
+  void printAll(); 
 
   template <typename T>
   T consume() {

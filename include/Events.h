@@ -44,6 +44,6 @@ struct Event {
   uint8_t event; 
   uint8_t event_param1; 
   uint16_t flags; 
-}
+};
 
 #endif 
