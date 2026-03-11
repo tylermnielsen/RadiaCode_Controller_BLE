@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+
 #include <variant>
 
 typedef uint32_t dt_t;
@@ -88,47 +89,55 @@ struct Event {
   }
 };
 
-// less confident in these types: 
+// less confident in these types:
 struct RawCountRate {
-  dt_t dt; 
-  float count_rate; 
-  uint16_t flags; 
-  int to_string(char * str, size_t len) const {
-    return snprintf(str, len, "%u,%.5f,%u", dt, count_rate, flags); 
+  dt_t dt;
+  float count_rate;
+  uint16_t flags;
+  int to_string(char* str, size_t len) const {
+    return snprintf(str, len, "%u,%.5f,%u", dt, count_rate, flags);
   }
-  int to_store(char * str, size_t len) const {
-    return snprintf(str, len, "%x,%x,%x", dt, count_rate, flags); 
+  int to_store(char* str, size_t len) const {
+    return snprintf(str, len, "%x,%x,%x", dt, count_rate, flags);
   }
 };
 
 struct RawDoseRate {
-  dt_t dt; 
-  float dose_rate; 
-  uint16_t flags; 
-  int to_string(char * str, size_t len) const {
-    return snprintf(str, len, "%u,%.5f,%u", dt, dose_rate, flags); 
+  dt_t dt;
+  float dose_rate;
+  uint16_t flags;
+  int to_string(char* str, size_t len) const {
+    return snprintf(str, len, "%u,%.5f,%u", dt, dose_rate, flags);
   }
-  int to_store(char * str, size_t len) const {
-    return snprintf(str, len, "%x,%x,%x", dt, dose_rate, flags); 
+  int to_store(char* str, size_t len) const {
+    return snprintf(str, len, "%x,%x,%x", dt, dose_rate, flags);
   }
 };
 // end
 
-// to be returned for the unknown types  
+// to be returned for the unknown types
 struct None {
-  uint8_t eid; 
-  uint8_t gid; 
-  int to_string(char* str, size_t len) const { return snprintf(str, len, "[None %u|%u]", eid, gid); }
-  int to_store(char* str, size_t len) const { return snprintf(str, len, "[None %x|%x]", eid, gid); }
+  uint8_t eid;
+  uint8_t gid;
+  int to_string(char* str, size_t len) const {
+    return snprintf(str, len, "[None %u|%u]", eid, gid);
+  }
+  int to_store(char* str, size_t len) const {
+    return snprintf(str, len, "[None %x|%x]", eid, gid);
+  }
 };
 
 struct Error {
-  int to_string(char* str, size_t len) const { return snprintf(str, len, "[Error]"); }
-  int to_store(char* str, size_t len) const { return snprintf(str, len, "[Error]"); }
+  int to_string(char* str, size_t len) const {
+    return snprintf(str, len, "[Error]");
+  }
+  int to_store(char* str, size_t len) const {
+    return snprintf(str, len, "[Error]");
+  }
 };
 
 // now combine into variant set
-using DataPoint =
-    std::variant<RealTimeData, RawData, DoseRateDB, RareData, Event, RawDoseRate, RawCountRate, Error, None>;
+using DataPoint = std::variant<RealTimeData, RawData, DoseRateDB, RareData,
+                               Event, RawDoseRate, RawCountRate, Error, None>;
 
 #endif
