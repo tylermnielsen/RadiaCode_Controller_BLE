@@ -6,7 +6,9 @@
 #include "BytesBuffer.h"
 #include "Events.h"
 
-void radiacode_ble_init(String target_mac, bool verbose);
+void radiacode_ble_init();
+void radiacode_ble_connect(String target_mac, bool verbose);
+void radiacode_ble_disconnect(); 
 
 uint8_t write_request(int command_id, uint8_t* data, size_t len);
 BytesBuffer* read_request(uint32_t command_id);

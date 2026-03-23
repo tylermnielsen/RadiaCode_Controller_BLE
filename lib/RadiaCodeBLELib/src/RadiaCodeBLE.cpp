@@ -81,11 +81,8 @@ static void notify(BLERemoteCharacteristic* c, const uint8_t* data,
 static BytesBuffer* ble_execute(uint8_t* data, size_t len) {
   for (int i = 0; i < len; i += 18) {
     // write write_fd
-    if(i * 18 < len){ //if (i * 18 + 18 < len) {
-      rc_write_char->setValue(data + i, 18);
-    } else {
-      rc_write_char->setValue(data + i, len % 18);
-    }
+    size_t chunk_size = (len - i > 18) ? 18 : (len - i); 
+    rc_write_char->setValue(data + i, chunk_size);
   }
 
   uint32_t start_time = millis();
@@ -168,13 +165,15 @@ static BytesBuffer* execute(uint16_t req_type, uint8_t* args, size_t len) {
   return response;
 }
 
-void radiacode_ble_init(String target_mac, bool verbose) {
-  mutex_init(&_response_mutex);
+void radiacode_ble_init(){
+  mutex_init(&_response_mutex); 
 
-  if (verbose) debug_printf("Starting BLE Client\n");
+  debug_printf("Starting BLE Client\n");
 
   BLE.begin();
+}
 
+void radiacode_ble_connect(String target_mac, bool verbose) {
   if (verbose) debug_printf("Scanning...\n");
 
   BLEScanReport* res = BLE.scan();
@@ -183,7 +182,7 @@ void radiacode_ble_init(String target_mac, bool verbose) {
     if (item.getAddress().toString() == target_mac) {
       if (verbose) debug_printf("Found device, connecting...\n");
       if (BLE.client()->connect(item) == false) {
-        if (verbose) debug_printf("Connected.\n");
+        if (verbose) debug_printf("Failed.\n");
       }
       break;
     }
@@ -214,6 +213,15 @@ void radiacode_ble_init(String target_mac, bool verbose) {
   // init?
   uint8_t data[] = {0x01, 0xff, 0x12, 0xff};
   execute(Command::SET_EXCHANGE, data, sizeof(data));
+}
+
+void radiacode_ble_disconnect(){
+  if(BLE.client() && BLE.client()->connected()){
+    BLE.client()->disconnect(); 
+  }
+
+  rc_write_char = nullptr; 
+  rc_notify_char = nullptr; 
 }
 
 uint8_t write_request(int command_id, uint8_t* data, size_t len) {

@@ -17,7 +17,8 @@ void setup() {
 
   while (!Serial);
 
-  radiacode_ble_init(target_mac, true);
+  radiacode_ble_init(); 
+  radiacode_ble_connect(target_mac, true);
 
   // set local time
   // Serial.println("Setting local time...");
@@ -39,7 +40,17 @@ void setup() {
   Serial.println("Setup Done.");
 }
 
+static int fails = 0; 
 void loop() {
+  Serial.println("loop"); 
+
+  if(fails > 10){
+    fails = 0;
+    Serial.println("attempting reconnect..."); 
+    radiacode_ble_disconnect(); 
+    radiacode_ble_connect(target_mac, true); 
+  }
+
   // get event data
   BytesBuffer* r = read_request(VS::DATA_BUF);
 
@@ -56,11 +67,18 @@ void loop() {
           },
           d);
     }
+  } else {
+    fails++; 
   }
 
   if (millis() - last_spectrum > 5000) {
     last_spectrum = millis();
     BytesBuffer* spec_buf = readSpectrumData(); 
+
+    if(spec_buf == nullptr){
+      fails++; 
+      return; 
+    }
 
     int spectrum[1024]; 
     float a0, a1, a2;
