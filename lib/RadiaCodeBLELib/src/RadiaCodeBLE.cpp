@@ -81,7 +81,7 @@ static void notify(BLERemoteCharacteristic* c, const uint8_t* data,
 static BytesBuffer* ble_execute(uint8_t* data, size_t len) {
   for (int i = 0; i < len; i += 18) {
     // write write_fd
-    if (i * 18 + 18 < len) {
+    if(i * 18 < len){ //if (i * 18 + 18 < len) {
       rc_write_char->setValue(data + i, 18);
     } else {
       rc_write_char->setValue(data + i, len % 18);
@@ -141,6 +141,11 @@ static BytesBuffer* execute(uint16_t req_type, uint8_t* args, size_t len) {
   // Serial.println();
 
   BytesBuffer* response = ble_execute(buffer, len + sizeof(BLERequestHeader));
+
+  // timeout occurred
+  if(response == nullptr){
+    return nullptr; 
+  }
 
   // check header
   // get header
@@ -211,16 +216,16 @@ void radiacode_ble_init(String target_mac, bool verbose) {
   execute(Command::SET_EXCHANGE, data, sizeof(data));
 }
 
-void write_request(int command_id, uint8_t* data, size_t len) {
+uint8_t write_request(int command_id, uint8_t* data, size_t len) {
   uint8_t buf[4 + len];
   memcpy(buf, &command_id, sizeof(int));
   memcpy(buf + sizeof(int), data, len);
 
   BytesBuffer* r = execute(Command::WR_VIRT_SFR, buf, (4 + len));
 
-  if (r->empty()) {
+  if (r == nullptr || r->empty()) {
     debug_printf("No r, likely timeout\n");
-    return;
+    return 1;
   }
 
   // match BytesBuffer behavior
@@ -229,6 +234,8 @@ void write_request(int command_id, uint8_t* data, size_t len) {
   if (retcode != 1) {
     debug_printf("Bad retcode %u\n", retcode);
   }
+
+  return 0; 
 }
 
 BytesBuffer* read_request(uint32_t command_id) {
@@ -288,6 +295,7 @@ String decode_cp1251(BytesBuffer* data) {
 uint8_t decode_spectrum(BytesBuffer* data, int* ret, float& a0, float& a1,
                         float& a2, uint32_t& ts) {
   // ret is assumed to be an array of len 1024
+  if(data == nullptr) return 1; 
 
   // read first bytes
   ts = data->consume<uint32_t>();
@@ -353,6 +361,11 @@ BytesBuffer* readSpectrumData(){
 void printSpectrum() {
   BytesBuffer* r = read_request(VS::SPECTRUM);
 
+  if(r == nullptr) {
+    debug_printf("Null r in printSpectrum"); 
+    return; 
+  }
+
   float a0, a1, a2;
   uint32_t ts;
   int spectrum[1024];
@@ -378,10 +391,10 @@ DataPoint consume_data_buf(BytesBuffer* r) {
 
   dt_t dt = ts_offset * 10;
 
-  String line = "";
   if (eid == 0) {
     if (gid == 0) {
       // RealTimeData
+      if(r->size() < (4 + 4 + 2 + 2 + 2 + 1)) return Error(); 
       return RealTimeData{dt,
                           r->consume<float>(),
                           r->consume<float>(),
@@ -391,9 +404,11 @@ DataPoint consume_data_buf(BytesBuffer* r) {
                           r->consume<uint8_t>()};
     } else if (gid == 1) {
       // RawData
+      if(r->size() < (4 + 4)) return Error(); 
       return RawData{dt, r->consume<float>(), r->consume<float>()};
     } else if (gid == 2) {
       // DoseRateDB
+      if(r->size() < (4 + 4 + 4 + 2 + 2)) return Error(); 
       return DoseRateDB{dt,
                         r->consume<uint32_t>(),
                         r->consume<float>(),
@@ -402,6 +417,7 @@ DataPoint consume_data_buf(BytesBuffer* r) {
                         r->consume<uint16_t>()};
     } else if (gid == 3) {
       // RareData
+      if(r->size() < (4 + 4 + 2 + 2 + 2)) return Error(); 
       return RareData{dt,
                       r->consume<uint32_t>(),
                       r->consume<float>(),
@@ -410,6 +426,7 @@ DataPoint consume_data_buf(BytesBuffer* r) {
                       r->consume<uint16_t>()};
     } else if (gid == 4) {
       // UserData - ?
+      if(r->size() < (4 + 4 + 4 + 2 + 2)) return Error(); 
       r->consume<uint32_t>();
       r->consume<float>();
       r->consume<float>();
@@ -418,6 +435,7 @@ DataPoint consume_data_buf(BytesBuffer* r) {
       return None{eid, gid};
     } else if (gid == 5) {
       // ScheduleData - ?
+      if(r->size() < (4 + 4 + 4 + 2 + 2)) return Error(); 
       r->consume<uint32_t>();
       r->consume<float>();
       r->consume<float>();
@@ -426,19 +444,23 @@ DataPoint consume_data_buf(BytesBuffer* r) {
       return None{eid, gid};
     } else if (gid == 6) {
       // AccelData - ?
+      if(r->size() < (2 + 2 + 2)) return Error(); 
       r->consume<uint16_t>();
       r->consume<uint16_t>();
       r->consume<uint16_t>();
       return None{eid, gid};
     } else if (gid == 7) {
       // Event
+      if(r->size() < (1 + 1 + 2)) return Error(); 
       return Event{dt, r->consume<uint8_t>(), r->consume<uint8_t>(),
                    r->consume<uint16_t>()};
     } else if (gid == 8) {
       // RawCountRate
+      if(r->size() < (4 + 2)) return Error(); 
       return RawCountRate{dt, r->consume<float>(), r->consume<uint16_t>()};
     } else if (gid == 9) {
       // RawDoseRate
+      if(r->size() < (4 + 2)) return Error(); 
       return RawDoseRate{dt, r->consume<float>(), r->consume<uint16_t>()};
     } else {
       debug_printf("Unknown eid: %d gid: %d\n", eid, gid);
@@ -446,20 +468,29 @@ DataPoint consume_data_buf(BytesBuffer* r) {
   } else if (eid == 1) {
     if (gid == 1) {
       // ???
+      if(r->size() < (2 + 4)) return Error(); 
       uint16_t samples_num = r->consume<uint16_t>();
       uint32_t smpl_time_ms = r->consume<uint32_t>();
+
+      if(r->size() < (8 * samples_num)) return Error(); 
       r->drain(nullptr, 8 * samples_num);
       return None{eid, gid};
     } else if (gid == 2) {
       // ???
+      if(r->size() < (2 + 4)) return Error(); 
       uint16_t samples_num = r->consume<uint16_t>();
       uint32_t smpl_time_ms = r->consume<uint32_t>();
+      
+      if(r->size() < (16 * samples_num)) return Error(); 
       r->drain(nullptr, 16 * samples_num);
       return None{eid, gid};
     } else if (gid == 3) {
       // ???
+      if(r->size() < (2 + 4)) return Error(); 
       uint16_t samples_num = r->consume<uint16_t>();
       uint32_t smpl_time_ms = r->consume<uint32_t>();
+
+      if(r->size() < (14 * samples_num)) return Error(); 
       r->drain(nullptr, 14 * samples_num);
       return None{eid, gid};
     } else {

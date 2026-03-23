@@ -8,7 +8,7 @@
 
 void radiacode_ble_init(String target_mac, bool verbose);
 
-void write_request(int command_id, uint8_t* data, size_t len);
+uint8_t write_request(int command_id, uint8_t* data, size_t len);
 BytesBuffer* read_request(uint32_t command_id);
 String decode_cp1251(BytesBuffer* data);
 uint8_t decode_spectrum(BytesBuffer* data, int* ret, float& a0, float& a1,

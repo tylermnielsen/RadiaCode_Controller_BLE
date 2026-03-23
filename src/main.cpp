@@ -43,17 +43,19 @@ void loop() {
   // get event data
   BytesBuffer* r = read_request(VS::DATA_BUF);
 
-  while (r->size() >= 7) {
-    DataPoint d = consume_data_buf(r);
+  if(r != nullptr){ 
+    while (r->size() >= 7) {
+      DataPoint d = consume_data_buf(r);
 
-    std::visit(
-        [](const auto& v) {
-          char str[500];
-          int len = v.to_string(str, 500);
-          Serial.printf("%u,%d,", millis(), len);
-          Serial.println(str);
-        },
-        d);
+      std::visit(
+          [](const auto& v) {
+            char str[500];
+            int len = v.to_string(str, 500);
+            Serial.printf("%u,%d,", millis(), len);
+            Serial.println(str);
+          },
+          d);
+    }
   }
 
   if (millis() - last_spectrum > 5000) {
