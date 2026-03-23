@@ -2,6 +2,10 @@
 
 #include <Arduino.h>  // for print and printAll
 
+#ifndef BytesBuffer_printf
+#define BytesBuffer_printf(...) Serial.printf(__VA_ARGS__)
+#endif
+
 BytesBuffer::BytesBuffer(size_t capacity) {
   this->start = 0;
   this->end = 0;
@@ -44,7 +48,7 @@ void BytesBuffer::pop_back() {
 
 void BytesBuffer::fill(const uint8_t* new_data, size_t len) {
   if (this->size() + len >= this->capacity) {
-    Serial.println("ERROR: Buffer overflow");
+    BytesBuffer_printf("ERROR: Buffer overflow\n");
     return;
   }
   // fill from start
@@ -92,10 +96,10 @@ void BytesBuffer::copy(BytesBuffer& other) {
 }
 
 void BytesBuffer::print() {
-  Serial.printf("start: %u end: %u capacity: %u\n", start, end, capacity);
+  BytesBuffer_printf("start: %u end: %u capacity: %u\n", start, end, capacity);
   int i = start;
   while (i != end) {
-    Serial.printf("%02x ", this->data[i]);
+    BytesBuffer_printf("%02x ", this->data[i]);
     i++;
     if (i >= capacity) i = 0;
   }
@@ -103,6 +107,6 @@ void BytesBuffer::print() {
 
 void BytesBuffer::printAll() {
   for (int i = 0; i < capacity; i++) {
-    Serial.printf("%02x ", this->data[i]);
+    BytesBuffer_printf("%02x ", this->data[i]);
   }
 }

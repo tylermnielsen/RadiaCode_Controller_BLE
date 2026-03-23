@@ -13,6 +13,7 @@ BytesBuffer* read_request(uint32_t command_id);
 String decode_cp1251(BytesBuffer* data);
 uint8_t decode_spectrum(BytesBuffer* data, int* ret, float& a0, float& a1,
                         float& a2, uint32_t& ts);
+BytesBuffer* readSpectrumData();
 void printSpectrum();
 DataPoint consume_data_buf(BytesBuffer* r);
 

@@ -2,6 +2,19 @@
 
 #include <BLE.h>
 
+// use this to print if 
+#ifndef RC_BLE_DEBUG 
+#define RC_BLE_DEBUG 1
+#endif 
+
+#ifndef debug_printf
+#define debug_printf(...) if(RC_BLE_DEBUG) Serial.printf(__VA_ARGS__)
+#endif 
+
+#ifndef always_printf
+#define always_printf(...) Serial.printf(__VA_ARGS__)
+#endif 
+
 #define RADIACODE_SERVICE_UUID "e63215e5-7003-49d8-96b0-b024798fb901"
 #define RADIACODE_WRITE_FD_UUID "e63215e6-7003-49d8-96b0-b024798fb901"
 #define RADIACODE_NOTIFY_FD_UUID "e63215e7-7003-49d8-96b0-b024798fb901"
@@ -26,7 +39,7 @@ static void notify(BLERemoteCharacteristic* c, const uint8_t* data,
   // if(c == rc_notify_char){
   //   Serial.println("rc_notify_char notify");
   //   for(int i = 0; i < len; i++){
-  //     Serial.printf("%02x ", data[i]);
+  //     debug_printf("%02x ", data[i]);
   //   }
   //   Serial.println();
   // }
@@ -123,7 +136,7 @@ static BytesBuffer* execute(uint16_t req_type, uint8_t* args, size_t len) {
 
   // Serial.println("Sending buffer:");
   // for(auto c : buffer){
-  //   Serial.printf("%02x ", c);
+  //   debug_printf("%02x ", c);
   // }
   // Serial.println();
 
@@ -136,8 +149,8 @@ static BytesBuffer* execute(uint16_t req_type, uint8_t* args, size_t len) {
   uint8_t received_req_seq_no = response->consume<uint8_t>();
   if (received_req_type != header.req_type || received_zero != header.zero ||
       received_req_seq_no != header.req_seq_no) {
-    Serial.println("Response header does not match request header!");
-    Serial.printf(
+    debug_printf("Response header does not match request header!\n");
+    debug_printf(
         "(expected|received) req_type: %u|%u zero: %u|%u req_seq_no: %u|%u\n",
         header.req_type, received_req_type, header.zero, received_zero,
         header.req_seq_no, received_req_seq_no);
@@ -153,44 +166,44 @@ static BytesBuffer* execute(uint16_t req_type, uint8_t* args, size_t len) {
 void radiacode_ble_init(String target_mac, bool verbose) {
   mutex_init(&_response_mutex);
 
-  if (verbose) Serial.println("Starting BLE Client");
+  if (verbose) debug_printf("Starting BLE Client\n");
 
   BLE.begin();
 
-  if (verbose) Serial.println("Scanning...");
+  if (verbose) debug_printf("Scanning...\n");
 
   BLEScanReport* res = BLE.scan();
 
   for (BLEAdvertising item : *res) {
     if (item.getAddress().toString() == target_mac) {
-      if (verbose) Serial.println("Found device, connecting...");
+      if (verbose) debug_printf("Found device, connecting...\n");
       if (BLE.client()->connect(item) == false) {
-        if (verbose) Serial.println("Connected.");
+        if (verbose) debug_printf("Connected.\n");
       }
       break;
     }
   }
 
-  if (verbose) Serial.println("Done.");
+  if (verbose) debug_printf("Done.\n");
 
-  if (verbose) Serial.println("Exploring service...");
+  if (verbose) debug_printf("Exploring service...\n");
   BLERemoteService* service = BLE.client()->service(rc_service_uuid);
 
   if (service) {
     rc_notify_char = service->characteristic(rc_notify_uuid);
     if (rc_notify_char) {
-      if (verbose) Serial.println("Found notify char");
+      if (verbose) debug_printf("Found notify char\n");
       rc_notify_char->onNotify(notify);
       rc_notify_char->enableNotifications();
     }
 
     rc_write_char = service->characteristic(rc_write_uuid);
     if (rc_write_char) {
-      if (verbose) Serial.println("Found write char");
+      if (verbose) debug_printf("Found write char\n");
     }
 
   } else {
-    if (verbose) Serial.println("Error on service");
+    if (verbose) debug_printf("Error on service\n");
   }
 
   // init?
@@ -206,7 +219,7 @@ void write_request(int command_id, uint8_t* data, size_t len) {
   BytesBuffer* r = execute(Command::WR_VIRT_SFR, buf, (4 + len));
 
   if (r->empty()) {
-    Serial.println("No r, likely timeout");
+    debug_printf("No r, likely timeout\n");
     return;
   }
 
@@ -214,7 +227,7 @@ void write_request(int command_id, uint8_t* data, size_t len) {
   uint32_t retcode = r->consume<uint32_t>();
 
   if (retcode != 1) {
-    Serial.printf("Bad retcode %u\n", retcode);
+    debug_printf("Bad retcode %u\n", retcode);
   }
 }
 
@@ -229,10 +242,10 @@ BytesBuffer* read_request(uint32_t command_id) {
   uint32_t flen = r->consume<uint32_t>();
 
   if (retcode != 1) {
-    Serial.printf("Bad retcode %x\n", retcode);
-    Serial.printf("flen: %x\n", flen);
+    debug_printf("Bad retcode %x\n", retcode);
+    debug_printf("flen: %x\n", flen);
     for (int i = 0; i < r->size(); i++) {
-      Serial.printf("%02x ", r->at(i));
+      debug_printf("%02x ", r->at(i));
     }
     return nullptr;
   }
@@ -244,7 +257,7 @@ BytesBuffer* read_request(uint32_t command_id) {
   // end
 
   if (r->size() != flen)
-    Serial.printf("Mismatch between buffer (%d) and header (%d)\n", r->size(),
+    debug_printf("Mismatch between buffer (%d) and header (%d)\n", r->size(),
                   flen);
 
   return r;
@@ -321,7 +334,7 @@ uint8_t decode_spectrum(BytesBuffer* data, int* ret, float& a0, float& a1,
 
         v = last + i;
       } else {
-        Serial.printf("Unsupported vlen %u\n", vlen);
+        debug_printf("Unsupported vlen %u\n", vlen);
         return 1;
       }
 
@@ -333,6 +346,10 @@ uint8_t decode_spectrum(BytesBuffer* data, int* ret, float& a0, float& a1,
   return 0;
 }
 
+BytesBuffer* readSpectrumData(){
+  return read_request(VS::SPECTRUM);
+}
+
 void printSpectrum() {
   BytesBuffer* r = read_request(VS::SPECTRUM);
 
@@ -340,12 +357,12 @@ void printSpectrum() {
   uint32_t ts;
   int spectrum[1024];
   decode_spectrum(r, spectrum, a0, a1, a2, ts);
-  Serial.printf("a0: %f, a1: %f, a2: %f, ts: %u\n", a0, a1, a2, ts);
-  Serial.println("Spectrum:");
+  always_printf("a0: %f, a1: %f, a2: %f, ts: %u\n", a0, a1, a2, ts);
+  always_printf("Spectrum:\n");
   for (int i = 0; i < 1024; i++) {
-    Serial.printf("%d, ", spectrum[i]);
+    always_printf("%d, ", spectrum[i]);
   }
-  Serial.println();
+  always_printf("\n");
 }
 
 DataPoint consume_data_buf(BytesBuffer* r) {
@@ -424,7 +441,7 @@ DataPoint consume_data_buf(BytesBuffer* r) {
       // RawDoseRate
       return RawDoseRate{dt, r->consume<float>(), r->consume<uint16_t>()};
     } else {
-      Serial.printf("Unknown eid: %d gid: %d\n", eid, gid);
+      debug_printf("Unknown eid: %d gid: %d\n", eid, gid);
     }
   } else if (eid == 1) {
     if (gid == 1) {
@@ -446,10 +463,10 @@ DataPoint consume_data_buf(BytesBuffer* r) {
       r->drain(nullptr, 14 * samples_num);
       return None{eid, gid};
     } else {
-      Serial.printf("Unknown eid: %d gid: %d\n", eid, gid);
+      debug_printf("Unknown eid: %d gid: %d\n", eid, gid);
     }
   } else {
-    Serial.printf("Unknown eid: %d gid: %d\n", eid, gid);
+    debug_printf("Unknown eid: %d gid: %d\n", eid, gid);
   }
 
   return Error();

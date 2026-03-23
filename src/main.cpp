@@ -49,8 +49,8 @@ void loop() {
     std::visit(
         [](const auto& v) {
           char str[500];
-          v.to_string(str, 500);
-          Serial.printf("%u,", millis());
+          int len = v.to_string(str, 500);
+          Serial.printf("%u,%d,", millis(), len);
           Serial.println(str);
         },
         d);
@@ -58,7 +58,19 @@ void loop() {
 
   if (millis() - last_spectrum > 5000) {
     last_spectrum = millis();
-    printSpectrum();
+    BytesBuffer* spec_buf = readSpectrumData(); 
+
+    int spectrum[1024]; 
+    float a0, a1, a2;
+    uint32_t ts;
+    decode_spectrum(spec_buf, spectrum, a0, a1, a2, ts);
+
+    Serial.printf("a0: %f, a1: %f, a2: %f, ts: %u\n", a0, a1, a2, ts);
+    Serial.printf("Spectrum: ");
+    for (int i = 0; i < 1024; i++) {
+      Serial.printf("%d, ", spectrum[i]);
+    }
+    Serial.printf("\n");
   }
 
   delay(1000);
