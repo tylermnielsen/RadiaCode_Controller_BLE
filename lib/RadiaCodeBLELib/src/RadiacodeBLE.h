@@ -7,7 +7,7 @@
 #include "Events.h"
 
 void radiacode_ble_init();
-void radiacode_ble_connect(String target_mac, bool verbose);
+uint8_t radiacode_ble_connect(String target_mac, bool verbose);
 void radiacode_ble_disconnect(); 
 
 uint8_t write_request(int command_id, uint8_t* data, size_t len);

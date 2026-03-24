@@ -40,7 +40,8 @@ void setup() {
   Serial.println("Setup Done.");
 }
 
-static int fails = 0; 
+static int fails = 0;
+static int spectrum[1024]; 
 void loop() {
   Serial.println("loop"); 
 
@@ -80,7 +81,6 @@ void loop() {
       return; 
     }
 
-    int spectrum[1024]; 
     float a0, a1, a2;
     uint32_t ts;
     decode_spectrum(spec_buf, spectrum, a0, a1, a2, ts);

@@ -173,7 +173,7 @@ void radiacode_ble_init(){
   BLE.begin();
 }
 
-void radiacode_ble_connect(String target_mac, bool verbose) {
+uint8_t radiacode_ble_connect(String target_mac, bool verbose) {
   if (verbose) debug_printf("Scanning...\n");
 
   BLEScanReport* res = BLE.scan();
@@ -183,6 +183,7 @@ void radiacode_ble_connect(String target_mac, bool verbose) {
       if (verbose) debug_printf("Found device, connecting...\n");
       if (BLE.client()->connect(item) == false) {
         if (verbose) debug_printf("Failed.\n");
+        return 1; 
       }
       break;
     }
@@ -199,20 +200,27 @@ void radiacode_ble_connect(String target_mac, bool verbose) {
       if (verbose) debug_printf("Found notify char\n");
       rc_notify_char->onNotify(notify);
       rc_notify_char->enableNotifications();
+    } else {
+      return 2; 
     }
 
     rc_write_char = service->characteristic(rc_write_uuid);
     if (rc_write_char) {
       if (verbose) debug_printf("Found write char\n");
+    } else {
+      return 3; 
     }
 
   } else {
-    if (verbose) debug_printf("Error on service\n");
+    if (verbose) debug_printf("RCError on service\n");
+    return 4; 
   }
 
   // init?
   uint8_t data[] = {0x01, 0xff, 0x12, 0xff};
   execute(Command::SET_EXCHANGE, data, sizeof(data));
+
+  return 0;
 }
 
 void radiacode_ble_disconnect(){
@@ -389,7 +397,7 @@ void printSpectrum() {
 DataPoint consume_data_buf(BytesBuffer* r) {
   if (r->size() < 7) {
     // too short?
-    return Error();
+    return RCError();
   }
 
   uint8_t seq = r->consume<uint8_t>();
@@ -402,7 +410,7 @@ DataPoint consume_data_buf(BytesBuffer* r) {
   if (eid == 0) {
     if (gid == 0) {
       // RealTimeData
-      if(r->size() < (4 + 4 + 2 + 2 + 2 + 1)) return Error(); 
+      if(r->size() < (4 + 4 + 2 + 2 + 2 + 1)) return RCError(); 
       return RealTimeData{dt,
                           r->consume<float>(),
                           r->consume<float>(),
@@ -412,11 +420,11 @@ DataPoint consume_data_buf(BytesBuffer* r) {
                           r->consume<uint8_t>()};
     } else if (gid == 1) {
       // RawData
-      if(r->size() < (4 + 4)) return Error(); 
+      if(r->size() < (4 + 4)) return RCError(); 
       return RawData{dt, r->consume<float>(), r->consume<float>()};
     } else if (gid == 2) {
       // DoseRateDB
-      if(r->size() < (4 + 4 + 4 + 2 + 2)) return Error(); 
+      if(r->size() < (4 + 4 + 4 + 2 + 2)) return RCError(); 
       return DoseRateDB{dt,
                         r->consume<uint32_t>(),
                         r->consume<float>(),
@@ -425,7 +433,7 @@ DataPoint consume_data_buf(BytesBuffer* r) {
                         r->consume<uint16_t>()};
     } else if (gid == 3) {
       // RareData
-      if(r->size() < (4 + 4 + 2 + 2 + 2)) return Error(); 
+      if(r->size() < (4 + 4 + 2 + 2 + 2)) return RCError(); 
       return RareData{dt,
                       r->consume<uint32_t>(),
                       r->consume<float>(),
@@ -434,41 +442,41 @@ DataPoint consume_data_buf(BytesBuffer* r) {
                       r->consume<uint16_t>()};
     } else if (gid == 4) {
       // UserData - ?
-      if(r->size() < (4 + 4 + 4 + 2 + 2)) return Error(); 
+      if(r->size() < (4 + 4 + 4 + 2 + 2)) return RCError(); 
       r->consume<uint32_t>();
       r->consume<float>();
       r->consume<float>();
       r->consume<uint16_t>();
       r->consume<uint16_t>();
-      return None{eid, gid};
+      return RCNone{eid, gid};
     } else if (gid == 5) {
       // ScheduleData - ?
-      if(r->size() < (4 + 4 + 4 + 2 + 2)) return Error(); 
+      if(r->size() < (4 + 4 + 4 + 2 + 2)) return RCError(); 
       r->consume<uint32_t>();
       r->consume<float>();
       r->consume<float>();
       r->consume<uint16_t>();
       r->consume<uint16_t>();
-      return None{eid, gid};
+      return RCNone{eid, gid};
     } else if (gid == 6) {
       // AccelData - ?
-      if(r->size() < (2 + 2 + 2)) return Error(); 
+      if(r->size() < (2 + 2 + 2)) return RCError(); 
       r->consume<uint16_t>();
       r->consume<uint16_t>();
       r->consume<uint16_t>();
-      return None{eid, gid};
+      return RCNone{eid, gid};
     } else if (gid == 7) {
       // Event
-      if(r->size() < (1 + 1 + 2)) return Error(); 
+      if(r->size() < (1 + 1 + 2)) return RCError(); 
       return Event{dt, r->consume<uint8_t>(), r->consume<uint8_t>(),
                    r->consume<uint16_t>()};
     } else if (gid == 8) {
       // RawCountRate
-      if(r->size() < (4 + 2)) return Error(); 
+      if(r->size() < (4 + 2)) return RCError(); 
       return RawCountRate{dt, r->consume<float>(), r->consume<uint16_t>()};
     } else if (gid == 9) {
       // RawDoseRate
-      if(r->size() < (4 + 2)) return Error(); 
+      if(r->size() < (4 + 2)) return RCError(); 
       return RawDoseRate{dt, r->consume<float>(), r->consume<uint16_t>()};
     } else {
       debug_printf("Unknown eid: %d gid: %d\n", eid, gid);
@@ -476,31 +484,31 @@ DataPoint consume_data_buf(BytesBuffer* r) {
   } else if (eid == 1) {
     if (gid == 1) {
       // ???
-      if(r->size() < (2 + 4)) return Error(); 
+      if(r->size() < (2 + 4)) return RCError(); 
       uint16_t samples_num = r->consume<uint16_t>();
       uint32_t smpl_time_ms = r->consume<uint32_t>();
 
-      if(r->size() < (8 * samples_num)) return Error(); 
+      if(r->size() < (8 * samples_num)) return RCError(); 
       r->drain(nullptr, 8 * samples_num);
-      return None{eid, gid};
+      return RCNone{eid, gid};
     } else if (gid == 2) {
       // ???
-      if(r->size() < (2 + 4)) return Error(); 
+      if(r->size() < (2 + 4)) return RCError(); 
       uint16_t samples_num = r->consume<uint16_t>();
       uint32_t smpl_time_ms = r->consume<uint32_t>();
       
-      if(r->size() < (16 * samples_num)) return Error(); 
+      if(r->size() < (16 * samples_num)) return RCError(); 
       r->drain(nullptr, 16 * samples_num);
-      return None{eid, gid};
+      return RCNone{eid, gid};
     } else if (gid == 3) {
       // ???
-      if(r->size() < (2 + 4)) return Error(); 
+      if(r->size() < (2 + 4)) return RCError(); 
       uint16_t samples_num = r->consume<uint16_t>();
       uint32_t smpl_time_ms = r->consume<uint32_t>();
 
-      if(r->size() < (14 * samples_num)) return Error(); 
+      if(r->size() < (14 * samples_num)) return RCError(); 
       r->drain(nullptr, 14 * samples_num);
-      return None{eid, gid};
+      return RCNone{eid, gid};
     } else {
       debug_printf("Unknown eid: %d gid: %d\n", eid, gid);
     }
@@ -508,5 +516,5 @@ DataPoint consume_data_buf(BytesBuffer* r) {
     debug_printf("Unknown eid: %d gid: %d\n", eid, gid);
   }
 
-  return Error();
+  return RCError();
 }

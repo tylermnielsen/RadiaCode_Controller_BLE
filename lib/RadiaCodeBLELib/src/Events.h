@@ -116,28 +116,28 @@ struct RawDoseRate {
 // end
 
 // to be returned for the unknown types
-struct None {
+struct RCNone {
   uint8_t eid;
   uint8_t gid;
   int to_string(char* str, size_t len) const {
-    return snprintf(str, len, "[None %u|%u]", eid, gid);
+    return snprintf(str, len, "[RCNone %u|%u]", eid, gid);
   }
   int to_store(char* str, size_t len) const {
-    return snprintf(str, len, "[None %x|%x]", eid, gid);
+    return snprintf(str, len, "[RCNone %x|%x]", eid, gid);
   }
 };
 
-struct Error {
+struct RCError {
   int to_string(char* str, size_t len) const {
-    return snprintf(str, len, "[Error]");
+    return snprintf(str, len, "[RCError]");
   }
   int to_store(char* str, size_t len) const {
-    return snprintf(str, len, "[Error]");
+    return snprintf(str, len, "[RCError]");
   }
 };
 
 // now combine into variant set
 using DataPoint = std::variant<RealTimeData, RawData, DoseRateDB, RareData,
-                               Event, RawDoseRate, RawCountRate, Error, None>;
+                               Event, RawDoseRate, RawCountRate, RCError, RCNone>;
 
 #endif
